@@ -23,16 +23,3 @@ Plugin simples para **GLPI 10.0.x** que altera automaticamente o **status do cha
 
 - Por padrão, não altera chamados já **Solucionados** ou **Fechados** (opção na tela).
 - O plugin só altera followups cujo `itemtype` seja `Ticket` (não mexe em followups de Problemas/Mudanças).
-
-
-## Novidades v1.1.0
-- Filtros: aplicar regra somente quando o status atual estiver em uma lista (checkboxes)
-- Followup: opção de status diferente para followup do Requerente vs Técnico/outros
-- Opção para ignorar tarefas privadas e/ou acompanhamentos privados
-
-
-## Novidades v1.2.1
-- Followup: detecção de técnico baseada no direito **"Se tornar encarregado"** (Ticket::OWN), em vez de interface 'central'.
-
-## Novidades v1.2.0
-- Followup: dividir por usuário técnico vs não-técnico.
