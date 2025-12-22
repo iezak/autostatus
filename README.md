@@ -1,4 +1,4 @@
-# AutoStatus (GLPI plugin)
+# AutoStatus (GLPI plugin teste)
 
 Plugin simples para **GLPI 10.0.x** que altera automaticamente o **status do chamado (Ticket)** quando ocorrerem eventos na timeline:
 
