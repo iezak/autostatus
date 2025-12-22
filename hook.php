@@ -401,6 +401,47 @@ function plugin_autostatus_ticket_has_running_timer(int $tickets_id): bool {
 }
 
 /**
+ * ActualTime direct call (when ActualTime writes to DB without GLPI hooks).
+ * Accepts a task id and itemtype (we only handle TicketTask).
+ */
+function plugin_autostatus_actualtime_notify_start(int $tasks_id, string $itemtype): void {
+   if ($itemtype !== 'TicketTask') {
+      return;
+   }
+   if (!plugin_autostatus_actualtime_is_available()) {
+      return;
+   }
+   $tickets_id = plugin_autostatus_get_ticket_id_from_tickettask($tasks_id);
+   if ($tickets_id <= 0) {
+      return;
+   }
+   $conf = plugin_autostatus_get_config();
+   $target = (int)($conf['actualtime_status_running'] ?? 0);
+   plugin_autostatus_apply_ticket_status($tickets_id, $target, 'actualtime_start');
+}
+
+function plugin_autostatus_actualtime_notify_stop(int $tasks_id, string $itemtype): void {
+   if ($itemtype !== 'TicketTask') {
+      return;
+   }
+   if (!plugin_autostatus_actualtime_is_available()) {
+      return;
+   }
+   $tickets_id = plugin_autostatus_get_ticket_id_from_tickettask($tasks_id);
+   if ($tickets_id <= 0) {
+      return;
+   }
+   $conf = plugin_autostatus_get_config();
+   if (!empty($conf['actualtime_stop_only_if_no_timer'])) {
+      if (plugin_autostatus_ticket_has_running_timer($tickets_id)) {
+         return;
+      }
+   }
+   $target = (int)($conf['actualtime_status_stopped'] ?? 0);
+   plugin_autostatus_apply_ticket_status($tickets_id, $target, 'actualtime_stop');
+}
+
+/**
  * Hook: called when ActualTime creates a timer entry (usually means START).
  * $item is expected to be instance of PluginActualtimeTask (but we keep it untyped).
  */
