@@ -193,7 +193,7 @@ echo "</td>";
 echo "<td>";
 Dropdown::showFromArray('ontask_status', $statusesWithNone, ['value' => $conf['ontask_status']]);
 echo "</td>";
-echo "<td>".__('Ex.: mudar para "Em atendimento" ao iniciar trabalho/registrar tempo (ActualTime).', 'autostatus')."</td>";
+echo "<td>".__('Ex.: mudar para "Em atendimento" ao iniciar trabalho/registrar tempo.', 'autostatus')."</td>";
 echo "</tr>";
 echo "<tr class='tab_bg_1'>";
 echo "<td><strong>".__('Ignorar tarefas privadas', 'autostatus')."</strong></td>";
@@ -204,7 +204,7 @@ echo "<td></td>";
 echo "</tr>";
 autostatus_render_allowed_statuses_row('ontask_allowed_statuses', $statuses, $ontask_allowed, __('Aplicar a regra de tarefa somente para alguns status atuais.', 'autostatus'));
 
-echo "<tr class='tab_bg_2'><th colspan='4'>".__('Integração com ActualTime (timer)', 'autostatus')."</th></tr>";
+echo "<tr class='tab_bg_2'><th colspan='4'>".__('Controle de tempo (interno)', 'autostatus')."</th></tr>";
 
 echo "<tr class='tab_bg_1'>";
 echo "<td><strong>".__('Habilitar', 'autostatus')."</strong></td>";
@@ -212,7 +212,7 @@ echo "<td>";
 Dropdown::showYesNo('actualtime_enabled', $conf['actualtime_enabled']);
 echo "</td>";
 echo "<td></td>";
-echo "<td>".__('Se o plugin ActualTime estiver ativo: ao iniciar/parar o timer, o status do ticket pode ser ajustado automaticamente.', 'autostatus')."</td>";
+echo "<td>".__('Ao iniciar/parar o timer interno, o status do ticket pode ser ajustado automaticamente.', 'autostatus')."</td>";
 echo "</tr>";
 
 echo "<tr class='tab_bg_1'>";

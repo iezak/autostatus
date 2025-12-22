@@ -315,6 +315,312 @@ function plugin_autostatus_item_add_followup(ITILFollowup $item): void {
 
 /**
  * =========================
+ * Internal timer (AutoStatus)
+ * =========================
+ */
+
+function plugin_autostatus_timer_table(): string {
+   return 'glpi_plugin_autostatus_timers';
+}
+
+function plugin_autostatus_timer_ensure_table(): void {
+   global $DB;
+
+   $table = plugin_autostatus_timer_table();
+   if ($DB->tableExists($table)) {
+      return;
+   }
+
+   $default_charset = DBConnection::getDefaultCharset();
+   $default_collation = DBConnection::getDefaultCollation();
+   $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
+
+   $query = "CREATE TABLE IF NOT EXISTS {$table} (
+      `id` int {$default_key_sign} NOT NULL auto_increment,
+      `itemtype` varchar(255) NOT NULL,
+      `items_id` int {$default_key_sign} NOT NULL DEFAULT '0',
+      `actual_begin` TIMESTAMP NULL DEFAULT NULL,
+      `actual_end` TIMESTAMP NULL DEFAULT NULL,
+      `users_id` int {$default_key_sign} NOT NULL,
+      `actual_actiontime` int {$default_key_sign} NOT NULL DEFAULT 0,
+      PRIMARY KEY (`id`),
+      KEY `item` (`itemtype`, `items_id`),
+      KEY `users_id` (`users_id`)
+   ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset}
+   COLLATE={$default_collation} ROW_FORMAT=DYNAMIC;";
+   $DB->doQueryOrDie($query, $DB->error());
+}
+
+function plugin_autostatus_timer_is_enabled(): bool {
+   $conf = plugin_autostatus_get_config();
+   return !empty($conf['actualtime_enabled']);
+}
+
+function plugin_autostatus_timer_get_state(int $tasks_id, string $itemtype): array {
+   global $DB;
+
+   $state = [
+      'running' => false,
+      'running_user_id' => 0,
+      'start_ts' => 0,
+      'total_completed' => 0,
+      'total' => 0,
+   ];
+
+   if ($tasks_id <= 0 || $itemtype === '') {
+      return $state;
+   }
+
+   $table = plugin_autostatus_timer_table();
+
+   $completed = 0;
+   $req = $DB->request([
+      'SELECT' => ['actual_actiontime'],
+      'FROM'   => $table,
+      'WHERE'  => [
+         'items_id' => $tasks_id,
+         'itemtype' => $itemtype,
+         [
+            'NOT' => ['actual_end' => null],
+         ],
+      ],
+   ]);
+   foreach ($req as $row) {
+      $completed += (int)($row['actual_actiontime'] ?? 0);
+   }
+
+   $running_req = $DB->request([
+      'SELECT' => ['actual_begin', 'users_id'],
+      'FROM'   => $table,
+      'WHERE'  => [
+         'items_id' => $tasks_id,
+         'itemtype' => $itemtype,
+         'actual_end' => null,
+      ],
+      'LIMIT'  => 1,
+   ]);
+   if ($row = $running_req->current()) {
+      $state['running'] = true;
+      $state['running_user_id'] = (int)($row['users_id'] ?? 0);
+      $state['start_ts'] = (int)strtotime((string)($row['actual_begin'] ?? ''));
+   }
+
+   $state['total_completed'] = $completed;
+   $state['total'] = $completed;
+   if ($state['running'] && $state['start_ts'] > 0) {
+      $state['total'] += max(0, time() - $state['start_ts']);
+   }
+
+   return $state;
+}
+
+function plugin_autostatus_timer_ticket_has_running_timer(int $tickets_id): bool {
+   if ($tickets_id <= 0) {
+      return false;
+   }
+
+   global $DB;
+   $table = plugin_autostatus_timer_table();
+   $tickets_id = (int)$tickets_id;
+
+   $query = "SELECT COUNT(*) AS c
+      FROM `{$table}` t
+      INNER JOIN `glpi_tickettasks` tt ON (tt.id = t.items_id)
+      WHERE t.itemtype = 'TicketTask'
+        AND tt.tickets_id = {$tickets_id}
+        AND t.actual_end IS NULL";
+
+   $res = $DB->query($query);
+   if (!$res) {
+      return false;
+   }
+   $row = $DB->fetchAssoc($res);
+   $c = (int)($row['c'] ?? 0);
+   return ($c > 0);
+}
+
+function plugin_autostatus_timer_start(int $tasks_id, string $itemtype): array {
+   if (!plugin_autostatus_timer_is_enabled()) {
+      return ['ok' => false, 'message' => __('Timer disabled', 'autostatus')];
+   }
+
+   if ($itemtype !== 'TicketTask' && $itemtype !== TicketTask::class) {
+      return ['ok' => false, 'message' => __('Unsupported itemtype', 'autostatus')];
+   }
+
+   $tasks_id = (int)$tasks_id;
+   if ($tasks_id <= 0) {
+      return ['ok' => false, 'message' => __('Invalid task', 'autostatus')];
+   }
+
+   $task = new TicketTask();
+   if (!$task->getFromDB($tasks_id)) {
+      return ['ok' => false, 'message' => __('Task not found', 'autostatus')];
+   }
+
+   if (isset($task->fields['users_id_tech'])) {
+      if ((int)$task->fields['users_id_tech'] !== Session::getLoginUserID()) {
+         return ['ok' => false, 'message' => __('Technician not in charge of the task', 'autostatus')];
+      }
+   }
+
+   if (!$task->can($tasks_id, UPDATE)) {
+      return ['ok' => false, 'message' => __('No permission to update task', 'autostatus')];
+   }
+
+   $state = plugin_autostatus_timer_get_state($tasks_id, 'TicketTask');
+   if (!empty($state['running'])) {
+      return ['ok' => false, 'message' => __('Timer already running', 'autostatus'), 'state' => $state];
+   }
+
+   global $DB;
+   $table = plugin_autostatus_timer_table();
+   $DB->insert($table, [
+      'items_id'     => $tasks_id,
+      'itemtype'     => 'TicketTask',
+      'actual_begin' => date('Y-m-d H:i:s'),
+      'users_id'     => Session::getLoginUserID(),
+      'actual_end'   => null,
+      'actual_actiontime' => 0,
+   ]);
+
+   $tickets_id = plugin_autostatus_get_ticket_id_from_tickettask($tasks_id);
+   if ($tickets_id > 0) {
+      $conf = plugin_autostatus_get_config();
+      $target = (int)($conf['actualtime_status_running'] ?? 0);
+      plugin_autostatus_apply_ticket_status($tickets_id, $target, 'actualtime_start');
+   }
+
+   $state = plugin_autostatus_timer_get_state($tasks_id, 'TicketTask');
+   return ['ok' => true, 'message' => __('Timer started', 'autostatus'), 'state' => $state];
+}
+
+function plugin_autostatus_timer_stop(int $tasks_id, string $itemtype): array {
+   if (!plugin_autostatus_timer_is_enabled()) {
+      return ['ok' => false, 'message' => __('Timer disabled', 'autostatus')];
+   }
+
+   if ($itemtype !== 'TicketTask' && $itemtype !== TicketTask::class) {
+      return ['ok' => false, 'message' => __('Unsupported itemtype', 'autostatus')];
+   }
+
+   $tasks_id = (int)$tasks_id;
+   if ($tasks_id <= 0) {
+      return ['ok' => false, 'message' => __('Invalid task', 'autostatus')];
+   }
+
+   global $DB;
+   $table = plugin_autostatus_timer_table();
+   $running_req = $DB->request([
+      'SELECT' => ['id', 'actual_begin', 'users_id'],
+      'FROM'   => $table,
+      'WHERE'  => [
+         'items_id' => $tasks_id,
+         'itemtype' => 'TicketTask',
+         'actual_end' => null,
+      ],
+      'LIMIT'  => 1,
+   ]);
+
+   $running_row = $running_req->current();
+   if (!$running_row) {
+      return ['ok' => false, 'message' => __('No running timer', 'autostatus')];
+   }
+
+   if ((int)($running_row['users_id'] ?? 0) !== Session::getLoginUserID()) {
+      return ['ok' => false, 'message' => __('Only the user who started can stop the timer', 'autostatus')];
+   }
+
+   $begin = (string)($running_row['actual_begin'] ?? '');
+   $seconds = 0;
+   if ($begin !== '') {
+      $seconds = max(0, (strtotime(date('Y-m-d H:i:s')) - strtotime($begin)));
+   }
+
+   $DB->update($table, [
+      'actual_end'        => date('Y-m-d H:i:s'),
+      'actual_actiontime' => $seconds,
+   ], [
+      'id' => (int)$running_row['id'],
+   ]);
+
+   $tickets_id = plugin_autostatus_get_ticket_id_from_tickettask($tasks_id);
+   if ($tickets_id > 0) {
+      $conf = plugin_autostatus_get_config();
+      if (!empty($conf['actualtime_stop_only_if_no_timer'])) {
+         if (!plugin_autostatus_timer_ticket_has_running_timer($tickets_id)) {
+            $target = (int)($conf['actualtime_status_stopped'] ?? 0);
+            plugin_autostatus_apply_ticket_status($tickets_id, $target, 'actualtime_stop');
+         }
+      } else {
+         $target = (int)($conf['actualtime_status_stopped'] ?? 0);
+         plugin_autostatus_apply_ticket_status($tickets_id, $target, 'actualtime_stop');
+      }
+   }
+
+   $state = plugin_autostatus_timer_get_state($tasks_id, 'TicketTask');
+   return ['ok' => true, 'message' => __('Timer stopped', 'autostatus'), 'state' => $state];
+}
+
+function plugin_autostatus_timer_post_form($params): void {
+   if (!plugin_autostatus_timer_is_enabled()) {
+      return;
+   }
+
+   $item = $params['item'] ?? null;
+   if (!is_object($item) || !method_exists($item, 'getType')) {
+      return;
+   }
+
+   $itemtype = $item->getType();
+   if ($itemtype !== TicketTask::class && $itemtype !== 'TicketTask') {
+      return;
+   }
+
+   $task_id = (int)$item->getID();
+   if ($task_id <= 0) {
+      return;
+   }
+
+   if (isset($item->fields['users_id_tech']) && (int)$item->fields['users_id_tech'] !== Session::getLoginUserID()) {
+      return;
+   }
+
+   if (!$item->can($task_id, UPDATE)) {
+      return;
+   }
+
+   global $CFG_GLPI;
+   $state = plugin_autostatus_timer_get_state($task_id, 'TicketTask');
+   $token = Session::getNewCSRFToken();
+   $url = $CFG_GLPI['root_doc'] . '/plugins/autostatus/front/timer.php';
+
+   $running = $state['running'] ? '1' : '0';
+   $start_ts = (int)$state['start_ts'];
+   $total_completed = (int)$state['total_completed'];
+
+   echo "<div class='autostatus-timer-box' data-autostatus-timer='1'"
+      . " data-url='" . Html::clean($url) . "'"
+      . " data-task-id='{$task_id}'"
+      . " data-itemtype='TicketTask'"
+      . " data-running='{$running}'"
+      . " data-start-ts='{$start_ts}'"
+      . " data-total='{$total_completed}'"
+      . " data-token='{$token}'>";
+
+   echo "<div class='b'>" . __('Timer', 'autostatus') . "</div>";
+   echo "<div class='autostatus-timer-display'>00:00:00</div>";
+   echo "<div class='autostatus-timer-actions' style='margin-top:6px'>";
+   echo "<button type='button' class='btn btn-primary btn-sm autostatus-timer-start' data-action='start'>" . __('Start') . "</button> ";
+   echo "<button type='button' class='btn btn-primary btn-sm autostatus-timer-stop' data-action='stop'>" . __('Stop') . "</button>";
+   echo "</div>";
+   echo "<div class='autostatus-timer-message' style='margin-top:6px;opacity:.8'></div>";
+   echo "</div>";
+}
+
+
+/**
+ * =========================
  * ActualTime integration
  * =========================
  *

@@ -1,4 +1,5 @@
 <?php
+use Glpi\Plugin\Hooks;
 /**
  * GLPI AutoStatus plugin
  * - Automatically changes ticket status when:
@@ -34,6 +35,18 @@ function plugin_init_autostatus() {
    $PLUGIN_HOOKS['item_update']['autostatus'] = [
       'PluginActualtimeTask' => 'plugin_autostatus_item_update_actualtime_task',
    ];
+
+   // Internal timer UI (TicketTask)
+   if (class_exists('\Glpi\Plugin\Hooks')) {
+      $PLUGIN_HOOKS[Hooks::POST_ITEM_FORM]['autostatus'] = 'plugin_autostatus_timer_post_form';
+      if (Session::getLoginUserID()) {
+         $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['autostatus'] = 'js/autostatus_timer.js';
+      }
+   }
+
+   if (function_exists('plugin_autostatus_timer_ensure_table')) {
+      plugin_autostatus_timer_ensure_table();
+   }
 }
 
 function plugin_version_autostatus() {
@@ -65,6 +78,33 @@ function plugin_autostatus_check_config($verbose = false) {
 }
 
 function plugin_autostatus_install() {
+   global $DB;
+
+   // Create timer table for internal control
+   $migration = new Migration(PLUGIN_AUTOSTATUS_VERSION);
+   $table = 'glpi_plugin_autostatus_timers';
+   if (!$DB->tableExists($table)) {
+      $default_charset = DBConnection::getDefaultCharset();
+      $default_collation = DBConnection::getDefaultCollation();
+      $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
+
+      $query = "CREATE TABLE IF NOT EXISTS {$table} (
+         `id` int {$default_key_sign} NOT NULL auto_increment,
+         `itemtype` varchar(255) NOT NULL,
+         `items_id` int {$default_key_sign} NOT NULL DEFAULT '0',
+         `actual_begin` TIMESTAMP NULL DEFAULT NULL,
+         `actual_end` TIMESTAMP NULL DEFAULT NULL,
+         `users_id` int {$default_key_sign} NOT NULL,
+         `actual_actiontime` int {$default_key_sign} NOT NULL DEFAULT 0,
+         PRIMARY KEY (`id`),
+         KEY `item` (`itemtype`, `items_id`),
+         KEY `users_id` (`users_id`)
+      ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset}
+      COLLATE={$default_collation} ROW_FORMAT=DYNAMIC;";
+      $DB->doQueryOrDie($query, $DB->error());
+   }
+   $migration->executeMigration();
+
    // Default values (0 means "do not change")
    $defaults = [
       // Global
@@ -112,6 +152,8 @@ function plugin_autostatus_install() {
 }
 
 function plugin_autostatus_uninstall() {
+   global $DB;
+
    $config = new Config();
    $config->deleteConfigurationValues('plugin:autostatus', [
       'ignore_solved_closed',
@@ -129,5 +171,10 @@ function plugin_autostatus_uninstall() {
 
       'followup_split_by_author', 'onfollowup_status_requester', 'onfollowup_status_other',
    ]);
+
+   $table = 'glpi_plugin_autostatus_timers';
+   if ($DB->tableExists($table)) {
+      $DB->query("DROP TABLE `{$table}`");
+   }
    return true;
 }
