@@ -1,4 +1,4 @@
-name: Deploy AutoStatus (Teste)
+name: Deploy AutoStatus (Servidor de Teste)
 
 on:
   push:
@@ -9,5 +9,5 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Atualizar plugin no servidor de teste
+      - name: Deploy no servidor de teste
         run: /usr/local/bin/deploy-autostatus-test.sh
