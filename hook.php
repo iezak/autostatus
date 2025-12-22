@@ -408,13 +408,12 @@ function plugin_autostatus_item_add_actualtime_task($item): void {
    if (!plugin_autostatus_actualtime_is_available()) {
       return;
    }
-   Toolbox::logInFile(
-      'autostatus.log',
-      "AT start hook: itemtype=" . ($item->fields['itemtype'] ?? '') .
+   $log_path = GLPI_ROOT . '/plugins/autostatus/inc/autostatus.log';
+   $log_line = "AT start hook: itemtype=" . ($item->fields['itemtype'] ?? '') .
       " items_id=" . ($item->fields['items_id'] ?? '') .
       " begin=" . ($item->fields['actual_begin'] ?? '') .
-      " end=" . ($item->fields['actual_end'] ?? '') . "\n"
-   );
+      " end=" . ($item->fields['actual_end'] ?? '') . "\n";
+   file_put_contents($log_path, $log_line, FILE_APPEND);
 
    // Expected columns: itemtype, items_id, actual_begin, actual_end
    $itemtype = (string)($item->fields['itemtype'] ?? '');
@@ -454,12 +453,11 @@ function plugin_autostatus_item_update_actualtime_task($item): void {
    if (!plugin_autostatus_actualtime_is_available()) {
       return;
    }
-   Toolbox::logInFile(
-      'autostatus.log',
-      "AT update hook: itemtype=" . ($item->fields['itemtype'] ?? '') .
+   $log_path = GLPI_ROOT . '/plugins/autostatus/inc/autostatus.log';
+   $log_line = "AT update hook: itemtype=" . ($item->fields['itemtype'] ?? '') .
       " items_id=" . ($item->fields['items_id'] ?? '') .
-      " updates=" . json_encode($item->updates ?? null) . "\n"
-   );
+      " updates=" . json_encode($item->updates ?? null) . "\n";
+   file_put_contents($log_path, $log_line, FILE_APPEND);
 
    $itemtype = (string)($item->fields['itemtype'] ?? '');
    if ($itemtype !== 'TicketTask') {
