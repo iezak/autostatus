@@ -1,0 +1,13 @@
+name: Deploy AutoStatus (Servidor de Teste)
+
+on:
+  push:
+    branches: ["ActualTime---GPT"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy no servidor de teste
+        run: /usr/local/bin/deploy-autostatus-test.sh
