@@ -408,6 +408,13 @@ function plugin_autostatus_item_add_actualtime_task($item): void {
    if (!plugin_autostatus_actualtime_is_available()) {
       return;
    }
+   Toolbox::logInFile(
+      'autostatus.log',
+      "AT start hook: itemtype=" . ($item->fields['itemtype'] ?? '') .
+      " items_id=" . ($item->fields['items_id'] ?? '') .
+      " begin=" . ($item->fields['actual_begin'] ?? '') .
+      " end=" . ($item->fields['actual_end'] ?? '') . "\n"
+   );
 
    // Expected columns: itemtype, items_id, actual_begin, actual_end
    $itemtype = (string)($item->fields['itemtype'] ?? '');
@@ -447,6 +454,12 @@ function plugin_autostatus_item_update_actualtime_task($item): void {
    if (!plugin_autostatus_actualtime_is_available()) {
       return;
    }
+   Toolbox::logInFile(
+      'autostatus.log',
+      "AT update hook: itemtype=" . ($item->fields['itemtype'] ?? '') .
+      " items_id=" . ($item->fields['items_id'] ?? '') .
+      " updates=" . json_encode($item->updates ?? null) . "\n"
+   );
 
    $itemtype = (string)($item->fields['itemtype'] ?? '');
    if ($itemtype !== 'TicketTask') {
