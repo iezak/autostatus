@@ -1,0 +1,13 @@
+name: Deploy AutoStatus (Teste)
+
+on:
+  push:
+    branches: ["ActualTime"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Atualizar plugin no servidor de teste
+        run: /usr/local/bin/deploy-autostatus-test.sh
