@@ -318,8 +318,8 @@ function plugin_autostatus_item_add_followup(ITILFollowup $item): void {
  * ActualTime integration
  * =========================
  *
- * ActualTime stores timer sessions in table `glpi_plugin_actualtime_tasks`, typically:
- *   id (PK), tasks_id, actual_begin, actual_end, users_id, actual_actiontime
+ * ActualTime stores timer sessions in table `glpi_plugin_actualtime_tasks`, commonly:
+ *   id (PK), itemtype, items_id, actual_begin, actual_end, users_id, actual_actiontime
  *
  * We react to:
  * - item_add on PluginActualtimeTask: timer started (row created with actual_end NULL)
@@ -386,8 +386,9 @@ function plugin_autostatus_ticket_has_running_timer(int $tickets_id): bool {
 
    $query = "SELECT COUNT(*) AS c
       FROM `glpi_plugin_actualtime_tasks` at
-      INNER JOIN `glpi_tickettasks` tt ON (tt.id = at.tasks_id)
-      WHERE tt.tickets_id = {$tickets_id}
+      INNER JOIN `glpi_tickettasks` tt ON (tt.id = at.items_id)
+      WHERE at.itemtype = 'TicketTask'
+        AND tt.tickets_id = {$tickets_id}
         AND at.actual_end IS NULL";
 
    $res = $DB->query($query);
@@ -408,8 +409,12 @@ function plugin_autostatus_item_add_actualtime_task($item): void {
       return;
    }
 
-   // Expected columns: tasks_id, actual_begin, actual_end
-   $tasks_id = (int)($item->fields['tasks_id'] ?? 0);
+   // Expected columns: itemtype, items_id, actual_begin, actual_end
+   $itemtype = (string)($item->fields['itemtype'] ?? '');
+   if ($itemtype !== 'TicketTask') {
+      return;
+   }
+   $tasks_id = (int)($item->fields['items_id'] ?? 0);
    if ($tasks_id <= 0) {
       return;
    }
@@ -443,7 +448,11 @@ function plugin_autostatus_item_update_actualtime_task($item): void {
       return;
    }
 
-   $tasks_id = (int)($item->fields['tasks_id'] ?? 0);
+   $itemtype = (string)($item->fields['itemtype'] ?? '');
+   if ($itemtype !== 'TicketTask') {
+      return;
+   }
+   $tasks_id = (int)($item->fields['items_id'] ?? 0);
    if ($tasks_id <= 0) {
       return;
    }
