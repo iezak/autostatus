@@ -1,0 +1,20 @@
+# Configuração local
+config.local.php
+.env
+.env.*
+
+# Backups
+*.bak
+*.bak-*
+*.backup
+*.old
+
+# Logs
+*.log
+
+# Dependências locais
+node_modules/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db

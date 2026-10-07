@@ -32,7 +32,7 @@ function plugin_version_autostatus() {
    return [
       'name'           => 'AutoStatus',
       'version'        => PLUGIN_AUTOSTATUS_VERSION,
-      'author'         => 'Iezak',
+      'author'         => 'Vinicius + ChatGPT',
       'license'        => 'GPLv2+',
       'homepage'       => '',
       'requirements'   => [
