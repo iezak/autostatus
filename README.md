@@ -36,3 +36,21 @@ Plugin simples para **GLPI 10.0.x** que altera automaticamente o **status do cha
 
 ## Novidades v1.2.0
 - Followup: dividir por usuário técnico vs não-técnico.
+
+## Revisão v1.2.2 — Compatibilidade e isolamento por entidade
+
+- Corrigida a classificação de técnico nas respostas: o direito `Ticket::OWN` agora é considerado apenas quando o perfil vale para a **entidade do chamado** ou para uma **entidade ancestral com vínculo recursivo**. Um perfil recursivo em outra entidade não classifica o usuário como técnico.
+- Corrigida a descrição da tela de configuração, que ainda mencionava apenas a interface Central; a regra efetiva é baseada no direito **Se tornar encarregado**.
+- A instalação/reinstalação inicializa apenas configurações ausentes, sem substituir as opções de status já gravadas pelo administrador.
+- A declaração de compatibilidade foi limitada à linha **GLPI 10.0.x / PHP 8.1+**, revisada com base no GLPI 10.0.26.
+- Nenhuma configuração de status ou filtro existente é alterada ao atualizar o código; os hooks continuam atuando apenas após criação de chamados, tarefas e acompanhamentos.
+- **Integração:** o plugin `mandatoryplanning` valida eventos externos do planejamento, portanto não compartilha os objetos/hook de inserção usados aqui. Já `londonrestrictcat` possui um hook de validação pré-atualização de chamados, que também é acionado ao alterar status: testar chamados em categorias restritas, sobretudo quando o acesso é concedido pela exceção de participante direto.
+
+### Testes recomendados
+
+1. Salvar a configuração de status e atualizar/reinstalar em **homologação**; confirmar que as opções continuam iguais.
+2. Adicionar tarefa em chamado aberto: aplicar o status configurado.
+3. Adicionar acompanhamento por técnico e por não-técnico: confirmar o status correspondente.
+4. Testar um usuário com direito de técnico em entidade **diferente** da entidade do chamado.
+5. Confirmar que chamados solucionados/fechados continuam protegidos quando `ignore_solved_closed` está ligado.
+6. Testar as ações automáticas e a edição de chamados da categoria restrita com `londonrestrictcat` ativo.
