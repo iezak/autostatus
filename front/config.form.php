@@ -200,10 +200,10 @@ echo "<td>".__('Regra simples: sempre trocar para este status quando houver acom
 echo "</tr>";
 
 echo "<tr class='tab_bg_1'>";
-echo "<td><strong>".__('Dividir por técnico (perfil Central)', 'autostatus')."</strong></td>";
+echo "<td><strong>".__('Dividir por técnico (direito de se tornar encarregado)', 'autostatus')."</strong></td>";
 echo "<td colspan='2'>";
 Dropdown::showYesNo('followup_split_by_author', $conf['followup_split_by_author']);
-echo " <span class='small' style='opacity:.85'>".__('Se SIM: se quem respondeu tiver perfil com interface Central (técnico), usa um status; caso contrário, usa outro.', 'autostatus')."</span>";
+echo " <span class='small' style='opacity:.85'>".__('Se SIM: considera técnico quem possui o direito Ticket::OWN na entidade do chamado (ou entidade ancestral recursiva). Caso contrário, aplica a regra de não-técnico.', 'autostatus')."</span>";
 echo "</td>";
 echo "<td></td>";
 echo "</tr>";
