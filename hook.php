@@ -96,12 +96,10 @@ function plugin_autostatus_current_status_allowed(int $current, string $csv_filt
 /**
  * Determine if a given user should be considered "technician".
  *
- * Practical rule for GLPI 10.x:
- * - if user has at least one profile with interface = 'central' (technician interface),
- *   we consider them technician.
- *
- * For multi-entity environments, we keep it permissive:
- * - entities_id = ticket entity OR entities_id = 0 (root) OR is_recursive = 1
+ * Practical rule for GLPI 10.0.x:
+ * - a user has a profile containing the Ticket::OWN right ("Se tornar
+ *   encarregado"), assigned to the ticket entity or a recursive ancestor.
+ * - a recursive profile in an unrelated entity does not qualify.
  */
 function plugin_autostatus_is_technician_user(int $users_id, int $tickets_id = 0): bool {
    global $DB;
@@ -110,14 +108,30 @@ function plugin_autostatus_is_technician_user(int $users_id, int $tickets_id = 0
       return false;
    }
 
-   // Optional: restrict check to profiles that apply to the ticket entity
+   if (!isset($DB)) {
+      return false;
+   }
+
+   // Check the actual profile scope for this ticket, including recursive
+   // ancestors only. The previous unconditional "pu.is_recursive = 1"
+   // incorrectly classified technicians assigned to unrelated entities.
    $entity_clause = "";
    if ($tickets_id > 0) {
       $ticket = new Ticket();
-      if ($ticket->getFromDB($tickets_id)) {
-         $entities_id = (int)($ticket->fields['entities_id'] ?? 0);
-         $entity_clause = " AND (pu.entities_id = {$entities_id} OR pu.entities_id = 0 OR pu.is_recursive = 1)";
+      if (!$ticket->getFromDB($tickets_id)) {
+         return false;
       }
+
+      $entities_id = (int)($ticket->fields['entities_id'] ?? 0);
+      $ancestors = getAncestorsOf('glpi_entities', $entities_id);
+      $ancestors = array_values(array_unique(array_map('intval', is_array($ancestors) ? $ancestors : [])));
+      $ancestor_ids = implode(',', array_filter($ancestors, static fn($id) => $id >= 0));
+
+      $entity_clause = " AND (pu.entities_id = {$entities_id}";
+      if ($ancestor_ids !== '') {
+         $entity_clause .= " OR (pu.is_recursive = 1 AND pu.entities_id IN ({$ancestor_ids}))";
+      }
+      $entity_clause .= ")";
    }
 
    // GLPI ticket right "Beeing in charge" / "Se tornar encarregado"
