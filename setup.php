@@ -6,10 +6,10 @@
  *   - a task is added
  *   - a followup is added
  *
- * Target: GLPI 10.0.x (tested conceptually for 10.0.19)
+ * Target: GLPI 10.0.x (reviewed against 10.0.26)
  */
 
-define('PLUGIN_AUTOSTATUS_VERSION', '1.2.1');
+define('PLUGIN_AUTOSTATUS_VERSION', '1.2.2');
 
 function plugin_init_autostatus() {
    global $PLUGIN_HOOKS;
@@ -34,11 +34,11 @@ function plugin_version_autostatus() {
       'version'        => PLUGIN_AUTOSTATUS_VERSION,
       'author'         => 'Vinicius + ChatGPT',
       'license'        => 'GPLv2+',
-      'homepage'       => '',
+      'homepage'       => 'https://github.com/iezak/autostatus',
       'requirements'   => [
          'glpi' => [
             'min' => '10.0.0',
-            'max' => '11.0.0',
+            'max' => '10.0.99',
          ],
          'php'  => [
             'min' => '8.1'
@@ -48,7 +48,13 @@ function plugin_version_autostatus() {
 }
 
 function plugin_autostatus_check_prerequisites() {
-   // Keep it permissive inside 10.x; GLPI will block incompatible versions anyway.
+   // The hook behavior has been reviewed for GLPI 10.0.x only.
+   if (version_compare(GLPI_VERSION, '10.0.0', '<')
+       || version_compare(GLPI_VERSION, '10.1.0', '>=')
+       || PHP_VERSION_ID < 80100) {
+      echo 'AutoStatus requer GLPI 10.0.x e PHP 8.1 ou superior.';
+      return false;
+   }
    return true;
 }
 
@@ -89,8 +95,13 @@ function plugin_autostatus_install() {
       'onfollowup_status_other'     => (defined('CommonITILObject::WAITING') ? CommonITILObject::WAITING : 4),
    ];
 
-   // Store plugin configuration using core Config API.
-   Config::setConfigurationValues('plugin:autostatus', $defaults);
+   // Do not overwrite an administrator's saved settings if the plugin is
+   // reinstalled or its install hook is invoked during maintenance.
+   $existing = Config::getConfigurationValues('plugin:autostatus');
+   $missing = array_diff_key($defaults, is_array($existing) ? $existing : []);
+   if ($missing !== []) {
+      Config::setConfigurationValues('plugin:autostatus', $missing);
+   }
    return true;
 }
 
