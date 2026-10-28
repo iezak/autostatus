@@ -33,6 +33,13 @@ $defaults = [
    'onfollowup_status'           => (defined('CommonITILObject::WAITING') ? CommonITILObject::WAITING : 4),
    'ignore_private_followups'    => 0,
 
+   'actualtime_enabled'                => 0,
+   'actualtime_status_running'         => 2,
+   'actualtime_status_stopped'         => 4,
+   'actualtime_stop_only_if_no_timer'   => 1,
+   'actualtime_allowed_statuses_start' => '',
+   'actualtime_allowed_statuses_stop'  => '',
+
    'followup_split_by_author'    => 1,
    'onfollowup_status_requester' => (defined('CommonITILObject::ASSIGNED') ? CommonITILObject::ASSIGNED : 2),
    'onfollowup_status_other'     => (defined('CommonITILObject::WAITING') ? CommonITILObject::WAITING : 4),
@@ -97,6 +104,13 @@ if (isset($_POST['update'])) {
       'onfollowup_status'           => (int)($_POST['onfollowup_status'] ?? 0),
       'ignore_private_followups'    => (int)($_POST['ignore_private_followups'] ?? 0),
 
+      'actualtime_enabled'                => (int)($_POST['actualtime_enabled'] ?? 0),
+      'actualtime_status_running'         => (int)($_POST['actualtime_status_running'] ?? 0),
+      'actualtime_status_stopped'         => (int)($_POST['actualtime_status_stopped'] ?? 0),
+      'actualtime_stop_only_if_no_timer'   => (int)($_POST['actualtime_stop_only_if_no_timer'] ?? 1),
+      'actualtime_allowed_statuses_start' => autostatus_array_to_csv($_POST['actualtime_allowed_statuses_start'] ?? []),
+      'actualtime_allowed_statuses_stop'  => autostatus_array_to_csv($_POST['actualtime_allowed_statuses_stop'] ?? []),
+
       'followup_split_by_author'    => (int)($_POST['followup_split_by_author'] ?? 0),
       'onfollowup_status_requester' => (int)($_POST['onfollowup_status_requester'] ?? 0),
       'onfollowup_status_other'     => (int)($_POST['onfollowup_status_other'] ?? 0),
@@ -110,6 +124,8 @@ if (isset($_POST['update'])) {
 $oncreate_allowed = autostatus_csv_to_array($conf['oncreate_allowed_statuses']);
 $ontask_allowed = autostatus_csv_to_array($conf['ontask_allowed_statuses']);
 $onfollowup_allowed = autostatus_csv_to_array($conf['onfollowup_allowed_statuses']);
+$actualtime_allowed_start = autostatus_csv_to_array($conf['actualtime_allowed_statuses_start']);
+$actualtime_allowed_stop = autostatus_csv_to_array($conf['actualtime_allowed_statuses_stop']);
 
 Html::header(__('AutoStatus', 'autostatus'), $_SERVER['PHP_SELF'], "config", "plugins");
 
@@ -176,7 +192,7 @@ echo "</td>";
 echo "<td>";
 Dropdown::showFromArray('ontask_status', $statusesWithNone, ['value' => $conf['ontask_status']]);
 echo "</td>";
-echo "<td>".__('Ex.: mudar para "Em atendimento" ao iniciar trabalho/registrar tempo (ActualTime).', 'autostatus')."</td>";
+echo "<td>".__('Ex.: mudar para "Em atendimento" ao adicionar uma tarefa. Para os cronômetros, configure a integração ActualTime abaixo.', 'autostatus')."</td>";
 echo "</tr>";
 echo "<tr class='tab_bg_1'>";
 echo "<td><strong>".__('Ignorar tarefas privadas', 'autostatus')."</strong></td>";
@@ -234,6 +250,25 @@ echo "</tr>";
 
 autostatus_render_allowed_statuses_row('onfollowup_allowed_statuses', $statuses, $onfollowup_allowed, __('Aplicar a regra de acompanhamento somente para alguns status atuais.', 'autostatus'));
 
+echo "<tr class='tab_bg_2'><th colspan='4'>".__('Integração com ActualTime London', 'autostatus')."</th></tr>";
+echo "<tr class='tab_bg_1'><td><strong>".__('Habilitar integração', 'autostatus')."</strong></td><td>";
+Dropdown::showYesNo('actualtime_enabled', $conf['actualtime_enabled']);
+echo "</td><td colspan='2'>".__('Requer ActualTime London 3.2.6-london.2 ou superior, com os avisos de início, pausa e encerramento.', 'autostatus')."</td></tr>";
+
+echo "<tr class='tab_bg_1'><td><strong>".__('Ao iniciar ou retomar', 'autostatus')."</strong></td><td colspan='2'>";
+Dropdown::showFromArray('actualtime_status_running', $statusesWithNone, ['value' => $conf['actualtime_status_running']]);
+echo "</td><td>".__('Padrão: Em atendimento.', 'autostatus')."</td></tr>";
+autostatus_render_allowed_statuses_row('actualtime_allowed_statuses_start', $statuses, $actualtime_allowed_start, __('Filtro para iniciar ou retomar o cronômetro.', 'autostatus'));
+
+echo "<tr class='tab_bg_1'><td><strong>".__('Ao pausar ou encerrar', 'autostatus')."</strong></td><td colspan='2'>";
+Dropdown::showFromArray('actualtime_status_stopped', $statusesWithNone, ['value' => $conf['actualtime_status_stopped']]);
+echo "</td><td>".__('Padrão: Pendente. Encerrar continua concluindo a tarefa no ActualTime.', 'autostatus')."</td></tr>";
+autostatus_render_allowed_statuses_row('actualtime_allowed_statuses_stop', $statuses, $actualtime_allowed_stop, __('Filtro para pausar ou encerrar o cronômetro.', 'autostatus'));
+
+echo "<tr class='tab_bg_1'><td><strong>".__('Aguardar todos os cronômetros do chamado', 'autostatus')."</strong></td><td>";
+Dropdown::showYesNo('actualtime_stop_only_if_no_timer', $conf['actualtime_stop_only_if_no_timer']);
+echo "</td><td colspan='2'>".__('Se SIM, só aplica o status de pausa/encerramento quando nenhuma tarefa deste chamado estiver rodando, de qualquer técnico. A opção de ignorar tarefas privadas também se aplica aos eventos de cronômetro.', 'autostatus')."</td></tr>";
+
 echo "<tr class='tab_bg_1'>";
 echo "<td colspan='4' class='center'>";
 echo "<button class='btn btn-primary' type='submit' name='update' value='1'>".__('Save')."</button>";
@@ -245,3 +280,4 @@ echo "</form>";
 echo "</div>";
 
 Html::footer();
+
