@@ -9,7 +9,7 @@
  * Target: GLPI 10.0.x (reviewed against 10.0.26)
  */
 
-define('PLUGIN_AUTOSTATUS_VERSION', '1.2.2');
+define('PLUGIN_AUTOSTATUS_VERSION', '1.4.0');
 
 function plugin_init_autostatus() {
    global $PLUGIN_HOOKS;
@@ -26,6 +26,9 @@ function plugin_init_autostatus() {
       'TicketTask'   => 'plugin_autostatus_item_add_task',
       'ITILFollowup' => 'plugin_autostatus_item_add_followup',
    ];
+
+   // The London fork writes timers directly, outside CommonDBTM item hooks.
+   $PLUGIN_HOOKS['actualtime_timer_state_changed']['autostatus'] = 'plugin_autostatus_actualtime_timer_state_changed';
 }
 
 function plugin_version_autostatus() {
@@ -87,6 +90,14 @@ function plugin_autostatus_install() {
       'onfollowup_status'        => (defined('CommonITILObject::WAITING') ? CommonITILObject::WAITING : 4),
       'ignore_private_followups' => 0,
 
+      // ActualTime London integration (opt-in; 0 = do not change status).
+      'actualtime_enabled'                => 0,
+      'actualtime_status_running'         => 2,
+      'actualtime_status_stopped'         => 4,
+      'actualtime_stop_only_if_no_timer'   => 1,
+      'actualtime_allowed_statuses_start' => '',
+      'actualtime_allowed_statuses_stop'  => '',
+
       // Optional: different status depending on who wrote the followup
       // - if author is the requester (users_id_recipient): use onfollowup_status_requester
       // - else (technician/other): use onfollowup_status_other
@@ -118,7 +129,12 @@ function plugin_autostatus_uninstall() {
 
       'onfollowup_enabled', 'onfollowup_status', 'ignore_private_followups',
 
+      'actualtime_enabled', 'actualtime_status_running', 'actualtime_status_stopped',
+      'actualtime_stop_only_if_no_timer',
+      'actualtime_allowed_statuses_start', 'actualtime_allowed_statuses_stop',
+
       'followup_split_by_author', 'onfollowup_status_requester', 'onfollowup_status_other',
    ]);
    return true;
 }
+

@@ -5,6 +5,63 @@ Plugin simples para **GLPI 10.0.x** que altera automaticamente o **status do cha
 - **Criação do chamado**
 - **Adição de Tarefa (TicketTask)** (inclui casos onde o plugin ActualTime grava como tarefa)
 - **Adição de Acompanhamento (ITILFollowup)**
+- **Início/retomada e pausa/encerramento dos cronômetros do ActualTime London** (integração opcional)
+
+## ActualTime London — v1.4.0
+
+Integração específica com [iezak/actualtime, branch london/glpi10](https://github.com/iezak/actualtime/tree/london/glpi10),
+com os eventos adicionados na versão **3.2.6-london.2**. A versão anterior grava os
+cronômetros diretamente no banco e não dispara os eventos de criação/atualização
+de objetos do GLPI; atualizar somente o AutoStatus não é suficiente.
+
+Em **Configuração > Plugins > AutoStatus > Configurar > Integração com ActualTime London**:
+
+1. Defina **Habilitar integração = Sim** (desabilitada por padrão).
+2. Escolha o status **Ao iniciar ou retomar** (padrão: **Em atendimento**).
+3. Escolha o status **Ao pausar ou encerrar** (padrão: **Pendente**).
+4. Mantenha **Aguardar todos os cronômetros do chamado = Sim** para tarefas simultâneas.
+
+| Evento | Comportamento padrão |
+| --- | --- |
+| Iniciar ou retomar uma tarefa | Chamado em atendimento |
+| Pausar/encerrar uma tarefa com outra ainda rodando no mesmo chamado | Mantém o status atual |
+| Pausar/encerrar o último cronômetro do chamado | Chamado pendente |
+| Encerrar a tarefa | O ActualTime continua concluindo a tarefa e atualizando sua duração |
+| Consultar contadores ou criar/editar/excluir apontamentos históricos | Não altera status por esta integração |
+
+A conferência inclui **todos os técnicos e tarefas do mesmo chamado**. Cronômetros
+de outros chamados, problemas, mudanças ou projetos não interferem. Registros sem
+horário inicial não são considerados cronômetros ativos.
+
+Os filtros de status de início e de pausa são independentes da regra de criação
+de tarefas. **Não alterar tickets Solucionados/Fechados**, **Ignorar tarefas
+privadas** e a opção **Não alterar** continuam sendo respeitados. Chamados na
+lixeira são ignorados. Uma tarefa privada rodando ainda participa da conferência
+de cronômetros do chamado, mesmo quando seus próprios eventos são ignorados.
+
+Atualize os dois plugins nas pastas existentes `autostatus` e `actualtime`, primeiro
+no espelho, com backup do banco e das pastas. Use a atualização normal do GLPI se
+solicitada, **sem desinstalar**. As configurações já salvas são preservadas, inclusive
+as chaves `actualtime_*` da antiga branch de teste. Esta integração usa somente os
+apontamentos do ActualTime e não cria tabela de cronômetros no AutoStatus.
+
+### Validação
+
+```bash
+php tests/regression/actualtime.php
+```
+
+Para executar as duas implementações juntas, com os repositórios lado a lado:
+
+```bash
+cd ../actualtime
+AUTOSTATUS_PLUGIN_DIR=../autostatus php tests/regression/timer-events.php
+```
+
+Os testes usam adaptadores de GLPI em memória, sem banco real. No espelho, confira
+iniciar A/B no mesmo chamado, pausar A mantendo atendimento, pausar B aplicando
+pendente, retomar A, e encerrar A mantendo a conclusão da tarefa. Repita com outro
+técnico e verifique os filtros, os status solucionado/fechado e os acompanhamentos.
 
 ## Instalação
 
@@ -54,3 +111,4 @@ Plugin simples para **GLPI 10.0.x** que altera automaticamente o **status do cha
 4. Testar um usuário com direito de técnico em entidade **diferente** da entidade do chamado.
 5. Confirmar que chamados solucionados/fechados continuam protegidos quando `ignore_solved_closed` está ligado.
 6. Testar as ações automáticas e a edição de chamados da categoria restrita com `londonrestrictcat` ativo.
+

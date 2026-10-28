@@ -32,6 +32,13 @@ function plugin_autostatus_get_config(): array {
       'onfollowup_status'           => (defined('CommonITILObject::WAITING') ? CommonITILObject::WAITING : 4),
       'ignore_private_followups'    => 0,
 
+      'actualtime_enabled'                => 0,
+      'actualtime_status_running'         => 2,
+      'actualtime_status_stopped'         => 4,
+      'actualtime_stop_only_if_no_timer'   => 1,
+      'actualtime_allowed_statuses_start' => '',
+      'actualtime_allowed_statuses_stop'  => '',
+
       'followup_split_by_author'    => 1,
       'onfollowup_status_requester' => (defined('CommonITILObject::ASSIGNED') ? CommonITILObject::ASSIGNED : 2),
       'onfollowup_status_other'     => (defined('CommonITILObject::WAITING') ? CommonITILObject::WAITING : 4),
@@ -170,7 +177,7 @@ function plugin_autostatus_apply_ticket_status(int $tickets_id, int $target_stat
 
    $conf = plugin_autostatus_get_config();
    $ticket = new Ticket();
-   if (!$ticket->getFromDB($tickets_id)) {
+   if (!$ticket->getFromDB($tickets_id) || !empty($ticket->fields['is_deleted'])) {
       return;
    }
 
@@ -193,6 +200,12 @@ function plugin_autostatus_apply_ticket_status(int $tickets_id, int $target_stat
       return;
    }
    if ($event === 'onfollowup' && !plugin_autostatus_current_status_allowed($current, (string)$conf['onfollowup_allowed_statuses'])) {
+      return;
+   }
+   if ($event === 'actualtime_start' && !plugin_autostatus_current_status_allowed($current, (string)$conf['actualtime_allowed_statuses_start'])) {
+      return;
+   }
+   if ($event === 'actualtime_stop' && !plugin_autostatus_current_status_allowed($current, (string)$conf['actualtime_allowed_statuses_stop'])) {
       return;
    }
    // Validate status
@@ -308,3 +321,72 @@ function plugin_autostatus_item_add_followup(ITILFollowup $item): void {
 
    plugin_autostatus_apply_ticket_status($tickets_id, $target, 'onfollowup');
 }
+
+/** A running timer must have a start; empty placeholder rows do not count. */
+function plugin_autostatus_ticket_has_running_timer(int $tickets_id): bool {
+   global $DB;
+
+   $timers = 'glpi_plugin_actualtime_tasks';
+   $tasks = 'glpi_tickettasks';
+   $iterator = $DB->request([
+      'SELECT' => [$timers . '.id'],
+      'FROM' => $timers,
+      'INNER JOIN' => [
+         $tasks => ['ON' => [$timers => 'items_id', $tasks => 'id']],
+      ],
+      'WHERE' => [
+         $tasks . '.tickets_id' => $tickets_id,
+         $timers . '.itemtype' => 'TicketTask',
+         'NOT' => [$timers . '.actual_begin' => null],
+         $timers . '.actual_end' => null,
+      ],
+      'LIMIT' => 1,
+   ]);
+   return count($iterator) > 0;
+}
+
+/**
+ * Native start/resume, pause and completion in iezak/actualtime london/glpi10.
+ * Called after a successful timer operation, never from browser polling or
+ * historical period edits. All timer records remain owned by ActualTime.
+ */
+function plugin_autostatus_actualtime_timer_state_changed(array $event): void {
+   global $DB;
+
+   $conf = plugin_autostatus_get_config();
+   if (empty($conf['actualtime_enabled'])
+       || ($event['itemtype'] ?? '') !== 'TicketTask'
+       || !in_array($event['action'] ?? '', ['start', 'pause', 'stop'], true)
+       || !Plugin::isPluginActive('actualtime')
+       || !isset($DB) || !$DB->tableExists('glpi_plugin_actualtime_tasks')) {
+      return;
+   }
+
+   $tasks_id = (int)($event['items_id'] ?? 0);
+   $task = new TicketTask();
+   if ($tasks_id <= 0 || !$task->getFromDB($tasks_id)
+       || (!empty($conf['ignore_private_tasks']) && !empty($task->fields['is_private']))) {
+      return;
+   }
+   $tickets_id = (int)($task->fields['tickets_id'] ?? 0);
+   if ($tickets_id <= 0) {
+      return;
+   }
+
+   $running = plugin_autostatus_ticket_has_running_timer($tickets_id);
+   if ($event['action'] === 'start') {
+      // Ignore a delayed start notification if the timer has already ended.
+      if ($running) {
+         plugin_autostatus_apply_ticket_status($tickets_id, (int)$conf['actualtime_status_running'], 'actualtime_start');
+      }
+      return;
+   }
+
+   // Scope to this ticket, across every task and technician, including private
+   // tasks. Timers on other tickets/types cannot keep this ticket in progress.
+   if (!empty($conf['actualtime_stop_only_if_no_timer']) && $running) {
+      return;
+   }
+   plugin_autostatus_apply_ticket_status($tickets_id, (int)$conf['actualtime_status_stopped'], 'actualtime_stop');
+}
+
