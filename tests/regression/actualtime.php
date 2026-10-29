@@ -2,6 +2,7 @@
 
 /** Run: php tests/regression/actualtime.php (isolated GLPI adapters). */
 define('GLPI_ROOT', dirname(__DIR__, 2));
+define('READ', 1);
 set_error_handler(static function ($severity, $message, $file, $line) {
    throw new ErrorException($message, 0, $severity, $file, $line);
 });
@@ -14,13 +15,24 @@ class Config {
 }
 class Plugin {
    public static $active = true;
-   public static function isPluginActive($name) { return self::$active; }
+   public static $ownerActive = true;
+   public static function isPluginActive($name) { return $name === 'autostatus' ? self::$ownerActive : self::$active; }
+}
+class Session {
+   public static $user = 42;
+   public static function getLoginUserID() { return self::$user; }
 }
 class Ticket {
    public static $rows = [];
    public static $updates = [];
+   public static $denied = [];
    public $fields = [];
    public function getFromDB($id) { $this->fields = self::$rows[$id] ?? []; return $this->fields !== []; }
+   public function can($id, $right) { return $this->getFromDB($id) && !in_array($id, self::$denied, true); }
+   public static function getAllStatusArray() { return [1 => 'New', 2 => 'Processing (assigned)', 3 => 'Processing (planned)', 4 => 'Pending', 5 => 'Solved', 6 => 'Closed']; }
+   public static function getStatus($value) { return self::getAllStatusArray()[$value]; }
+   public static function getStatusClass($value) { return 'itilstatus status-' . $value; }
+   public static function getAllowedStatusArray($current) { return self::getAllStatusArray(); }
    public function update($input) {
       self::$rows[$input['id']] = array_merge($this->fields, $input);
       self::$updates[] = $input;
@@ -32,6 +44,7 @@ class TicketTask {
    public $fields = [];
    public function getFromDB($id) { $this->fields = self::$rows[$id] ?? []; return $this->fields !== []; }
 }
+class ITILFollowup { public $fields = []; }
 class TimerDB {
    public $timers = [];
    public $table = true;
@@ -72,9 +85,12 @@ function fixture(array $config = []): void {
    global $DB;
    $DB = new TimerDB();
    Plugin::$active = true;
+   Plugin::$ownerActive = true;
+   Session::$user = 42;
    Config::$values = $config + ['actualtime_enabled' => 1];
    Ticket::$rows = [1 => ['id' => 1, 'status' => 4], 2 => ['id' => 2, 'status' => 4]];
    Ticket::$updates = [];
+   Ticket::$denied = [];
    TicketTask::$rows = [
       10 => ['id' => 10, 'tickets_id' => 1],
       11 => ['id' => 11, 'tickets_id' => 1],
@@ -88,6 +104,8 @@ function event(string $action, int $task = 10, string $type = 'TicketTask'): voi
    plugin_autostatus_actualtime_timer_state_changed(['action' => $action, 'items_id' => $task, 'itemtype' => $type]);
 }
 function status(int $id = 1): int { return Ticket::$rows[$id]['status']; }
+
+if (defined('AUTOSTATUS_FIXTURE_ONLY')) { return; }
 
 fixture();
 plugin_init_autostatus();
@@ -181,4 +199,23 @@ plugin_autostatus_uninstall();
 check(!isset(Config::$values['actualtime_enabled']), 'Uninstall removes integration configuration');
 Config::$values = [];
 check(plugin_autostatus_get_config()['actualtime_enabled'] === 0, 'New integration stays opt-in until enabled');
+fixture(['actualtime_enabled' => 0]);
+Plugin::$active = false;
+TicketTask::$rows = [];
+$state = plugin_autostatus_get_ticket_state(1);
+check($state['status'] === 4 && $state['id'] === 1, 'UI status works without ActualTime, tasks or timers');
+check($state['label'] === 'Pending' && isset($state['options'][4]), 'UI labels and transitions come from the saved ticket');
+foreach ([0, -1, 'invalid', '1 OR 1=1', []] as $invalid) {
+   try { plugin_autostatus_get_ticket_state($invalid); check(false, 'Invalid ID was accepted'); }
+   catch (InvalidArgumentException $error) { check(true, 'Invalid ID rejected'); }
+}
+foreach (['denied', 'deleted', 'missing', 'logged out'] as $case) {
+   fixture();
+   if ($case === 'denied') { Ticket::$denied = [1]; }
+   if ($case === 'deleted') { Ticket::$rows[1]['is_deleted'] = 1; }
+   if ($case === 'missing') { unset(Ticket::$rows[1]); }
+   if ($case === 'logged out') { Session::$user = 0; }
+   try { plugin_autostatus_get_ticket_state(1); check(false, 'Inaccessible status exposed'); }
+   catch (InvalidArgumentException | RuntimeException $error) { check(true, 'Status omitted: ' . $case); }
+}
 echo "OK: $checks AutoStatus checks (GLPI adapters, no live database).\n";

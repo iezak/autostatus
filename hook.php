@@ -47,6 +47,26 @@ function plugin_autostatus_get_config(): array {
    return array_merge($defaults, is_array($conf) ? $conf : []);
 }
 
+/** Read the saved status for the AutoStatus UI, independently of other plugins. */
+function plugin_autostatus_get_ticket_state($tickets_id): array {
+   if (!Session::getLoginUserID()
+       || filter_var($tickets_id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) {
+      throw new InvalidArgumentException('Invalid ticket');
+   }
+   $ticket = new Ticket();
+   if (!$ticket->can((int)$tickets_id, READ) || !empty($ticket->fields['is_deleted'])) {
+      throw new RuntimeException('Access denied');
+   }
+   $status = (int)$ticket->fields['status'];
+   return [
+      'id' => (int)$ticket->fields['id'],
+      'status' => $status,
+      'label' => (string)$ticket::getStatus($status),
+      'icon' => $ticket::getStatusClass($status),
+      'options' => $ticket::getAllowedStatusArray($status),
+   ];
+}
+
 /**
  * Build allowed statuses array for tickets.
  */

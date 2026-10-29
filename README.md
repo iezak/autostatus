@@ -7,6 +7,40 @@ Plugin simples para **GLPI 10.0.x** que altera automaticamente o **status do cha
 - **Adição de Acompanhamento (ITILFollowup)**
 - **Início/retomada e pausa/encerramento dos cronômetros do ActualTime London** (integração opcional)
 
+## Responsabilidades e atualização visual — v1.5.0
+
+O **AutoStatus** possui as regras de status, a consulta do status salvo e a
+atualização do painel do chamado. Seu JavaScript `js/autostatus.js` e seu endpoint
+de leitura `ajax/status.php` funcionam sem o ActualTime.
+
+O painel é sincronizado ao salvar acompanhamentos/tarefas, concluir ou reabrir
+tarefas e abrir/fechar seu editor. A consulta independe de tarefas ou cronômetros
+ativos e respeita o acesso de leitura ao chamado. Atualiza Select2, rótulo e ícone,
+preservando rascunhos e escolhas manuais de status. Respostas anteriores a uma
+ação são descartadas, e a leitura não grava alterações.
+
+O **ActualTime** possui os apontamentos, durações e controles de tempo. A integração
+do AutoStatus recebe seus eventos genéricos; o ActualTime não precisa conhecer
+configurações, regras ou campos de status do AutoStatus.
+
+Para concluir a migração das versões London anteriores, atualize primeiro
+**AutoStatus 1.5.0** e depois **ActualTime 3.2.6-london.5**, sem desinstalar.
+As configurações existentes são preservadas. A integração também aceita as
+respostas das versões London anteriores do cronômetro.
+
+Validação no repositório AutoStatus:
+
+```bash
+php tests/regression/actualtime.php
+ACTUALTIME_PLUGIN_DIR=../actualtime php tests/regression/actualtime-integration.php
+AUTOSTATUS_GLPI_CORE=/caminho/glpi node tests/regression/status.browser.cjs
+```
+
+O teste de navegador utiliza Playwright, jQuery e Select2, e verifica tarefas e
+acompanhamentos sem carregar o JavaScript do ActualTime. A integração PHP executa
+as classes reais dos dois plugins com adaptadores de GLPI. A conferência final do
+painel e dos contadores deve ser feita no espelho.
+
 ## ActualTime London — v1.4.0
 
 Integração específica com [iezak/actualtime, branch london/glpi10](https://github.com/iezak/actualtime/tree/london/glpi10),
@@ -54,8 +88,7 @@ php tests/regression/actualtime.php
 Para executar as duas implementações juntas, com os repositórios lado a lado:
 
 ```bash
-cd ../actualtime
-AUTOSTATUS_PLUGIN_DIR=../autostatus php tests/regression/timer-events.php
+ACTUALTIME_PLUGIN_DIR=../actualtime php tests/regression/actualtime-integration.php
 ```
 
 Os testes usam adaptadores de GLPI em memória, sem banco real. No espelho, confira
