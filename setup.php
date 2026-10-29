@@ -9,7 +9,7 @@
  * Target: GLPI 10.0.x (reviewed against 10.0.26)
  */
 
-define('PLUGIN_AUTOSTATUS_VERSION', '1.4.0');
+define('PLUGIN_AUTOSTATUS_VERSION', '1.5.0');
 
 function plugin_init_autostatus() {
    global $PLUGIN_HOOKS;
@@ -19,6 +19,7 @@ function plugin_init_autostatus() {
 
    // Show a configuration page (Setup > Plugins > AutoStatus > Configure)
    $PLUGIN_HOOKS['config_page']['autostatus'] = 'front/config.form.php';
+   $PLUGIN_HOOKS['add_javascript']['autostatus'] = 'js/autostatus.js';
 
    // Hooks: run when objects are added
    $PLUGIN_HOOKS['item_add']['autostatus'] = [
